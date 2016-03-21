@@ -70,7 +70,14 @@ class DailyIRC : Application() {
 
         exitButton.setOnAction {
             Platform.exit()
+            System.exit(0)
         }
+
+        stage.setOnCloseRequest {
+            Platform.exit()
+            System.exit(0)
+        }
+
 
         // Enable/disable disconnect button based on state
         tabbedPane.selectionModel.selectedItemProperty().addListener({ observableValue, oldValue, newValue ->
