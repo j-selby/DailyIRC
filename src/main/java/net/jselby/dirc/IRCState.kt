@@ -68,6 +68,16 @@ class IRCState(val closeCallback : (IRCState) -> Unit, val host : String, val ni
                                 addSysChat(currentChannel, "Leaving channel: $channel")
                                 partChannel(channel)
                             }
+                        } else if (command.equals("msg")) { // MSG command
+                            if (split.size < 2) {
+                                if (!currentChannel.equals("Info")) {
+                                    addSysChat(currentChannel, "Leaving channel: $currentChannel")
+                                    partChannel(currentChannel)
+                                } else {
+                                }
+                            } else {
+                                addSysChat(currentChannel, "Syntax: /msg <user> <msg>")
+                            }
                         } else {
                             addSysChat(currentChannel, "Unknown command.")
                         }
@@ -204,13 +214,16 @@ class IRCState(val closeCallback : (IRCState) -> Unit, val host : String, val ni
                 addSysChat(it.target, "$user connected.")
             } else if (it.messageType == IRCMessageType.QUIT || it.messageType == IRCMessageType.PART) {
                 val user = it.messageSrc.split("!")[0].substring(1)
-                addSysChat(it.target, "$user disconnected.")
-                if (user.equals(nickname)) {
-                    Platform.runLater {
-                        listItems.remove(it.target)
-                        channelContents.remove(it.target)
+                if (!it.target.startsWith(":")) {
+                    addSysChat(it.target, "$user disconnected.")
+                    if (user.equals(nickname)) {
+                        Platform.runLater {
+                            listItems.remove(it.target)
+                            channelContents.remove(it.target)
+                        }
                     }
                 }
+                // TODO: Handle connected list
             }
         }
         connection!!.connect()
