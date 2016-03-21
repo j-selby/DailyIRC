@@ -49,7 +49,7 @@ enum class IRCMessageType(val id: Int, val netName: String) {
     PRIVMSG(-1, "PRIVMSG"),
     CHANNEL_MOTD(332, ""),
     PING(-1, "PING"),
-    NAMES(333, ""),
+    NAMES(353, ""),
     END_NAMES(366, ""),
     UNKNOWN(-1, "")
 }

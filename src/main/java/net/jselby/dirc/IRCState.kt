@@ -12,6 +12,8 @@ import net.jselby.dirc.io.IRCConnection
 import net.jselby.dirc.io.IRCMessageType
 import java.text.SimpleDateFormat
 import java.util.*
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.CopyOnWriteArrayList
 
 /**
  * Represents the state of a IRC connection
@@ -21,6 +23,8 @@ class IRCState(val closeCallback : (IRCState) -> Unit, val host : String, val ni
     var connection : IRCConnection? = null
     var isConnected = false
     var channelContents = HashMap<String, String>()
+                              // User,   Channel(s)
+    var connectedUsers = ConcurrentHashMap<String, CopyOnWriteArrayList<String>>()
     var currentChannel = "Info"
 
     // UI
@@ -69,14 +73,33 @@ class IRCState(val closeCallback : (IRCState) -> Unit, val host : String, val ni
                                 partChannel(channel)
                             }
                         } else if (command.equals("msg")) { // MSG command
-                            if (split.size < 2) {
-                                if (!currentChannel.equals("Info")) {
-                                    addSysChat(currentChannel, "Leaving channel: $currentChannel")
-                                    partChannel(currentChannel)
-                                } else {
-                                }
+                            if (split.size > 2) {
+                                val content = split.subList(2, split.size).joinToString(" ")
+                                connection!!.writeLine("PRIVMSG" +
+                                        " ${split[1]} :$content")
+                                addChat(split[1], nickname, content)
                             } else {
                                 addSysChat(currentChannel, "Syntax: /msg <user> <msg>")
+                            }
+                        } else if (command.equals("nicks")) { // NICKS command
+                            if (split.size == 1) {
+                                val currentList = ArrayList<String>()
+                                for (entry in connectedUsers.entries) {
+                                    if (entry.value.contains(currentChannel)) {
+                                        currentList.add(entry.key)
+                                    }
+                                }
+                                addSysChat(currentChannel, currentList.joinToString(" "))
+                            } else if (split.size == 2) {
+                                val currentList = ArrayList<String>()
+                                for (entry in connectedUsers.entries) {
+                                    if (entry.value.contains(split[1])) {
+                                        currentList.add(entry.key)
+                                    }
+                                }
+                                addSysChat(currentChannel, currentList.joinToString(" "))
+                            } else {
+                                addSysChat(currentChannel, "Syntax: /nicks [channel]")
                             }
                         } else {
                             addSysChat(currentChannel, "Unknown command.")
@@ -191,7 +214,10 @@ class IRCState(val closeCallback : (IRCState) -> Unit, val host : String, val ni
             println("< ${it.rawMessage}")
 
             if (it.messageType == IRCMessageType.PRIVMSG) {
-                val channel = it.target
+                var channel = it.target
+                if (channel == nickname) {
+                    channel = it.messageSrc.substring(1).split("!")[0]
+                }
                 addChat(channel, it.messageSrc.substring(1).split("!")[0], it.content.substring(1))
             } else if (it.messageType == IRCMessageType.SERVER_NOTICE) {
                 if (it.messageSrc.startsWith(":ChanServ!")) {
@@ -206,24 +232,54 @@ class IRCState(val closeCallback : (IRCState) -> Unit, val host : String, val ni
                 val channel = it.content.split(" ")[0]
                 val split = it.content.split(" ")
                 addSysChat(channel, split.subList(1, split.size).joinToString(" ").substring(1))
+            } else if (it.messageType == IRCMessageType.NAMES) {
+                val split = it.content.split(" ")
+                val channel = split[1]
+                if (split.size > 2) {
+                    val userSplit = split.subList(2, split.size).joinToString(" ").substring(1).split(" ")
+                    for (name in userSplit) {
+                        val list = connectedUsers.getOrPut(name, {CopyOnWriteArrayList()})
+                        if (!list.contains(channel)) {
+                            list.add(channel)
+                        }
+                    }
+                }
             } else if (it.messageType == IRCMessageType.END_NAMES) {
                 val channel = it.content.split(" ")[0]
                 addSysChat(channel, "Connected to $channel.")
             } else if (it.messageType == IRCMessageType.JOIN) {
                 val user = it.messageSrc.split("!")[0].substring(1)
                 addSysChat(it.target, "$user connected.")
-            } else if (it.messageType == IRCMessageType.QUIT || it.messageType == IRCMessageType.PART) {
-                val user = it.messageSrc.split("!")[0].substring(1)
-                if (!it.target.startsWith(":")) {
-                    addSysChat(it.target, "$user disconnected.")
-                    if (user.equals(nickname)) {
-                        Platform.runLater {
-                            listItems.remove(it.target)
-                            channelContents.remove(it.target)
-                        }
+                Platform.runLater {
+                    val list = connectedUsers.getOrPut(user, {CopyOnWriteArrayList()})
+                    if (!list.contains(it.target)) {
+                        list.add(it.target)
                     }
                 }
-                // TODO: Handle connected list
+            } else if (it.messageType == IRCMessageType.PART) {
+                val user = it.messageSrc.split("!")[0].substring(1)
+
+                //if (!it.target.startsWith(":")) {
+                connectedUsers.getOrDefault(user, CopyOnWriteArrayList()).remove(it.target)
+                addSysChat(it.target, "$user disconnected.")
+                if (user.equals(nickname)) {
+                    Platform.runLater {
+                        listItems.remove(it.target)
+                        channelContents.remove(it.target)
+                    }
+                }
+                //}
+
+            } else if (it.messageType == IRCMessageType.QUIT) {
+                val user = it.messageSrc.split("!")[0].substring(1)
+
+                for (channel in connectedUsers.getOrDefault(user, CopyOnWriteArrayList())) {
+                    addSysChat(channel, "$user disconnected.")
+                }
+
+                Platform.runLater {
+                    connectedUsers.remove(user)
+                }
             }
         }
         connection!!.connect()
