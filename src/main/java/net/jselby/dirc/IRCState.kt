@@ -200,7 +200,14 @@ class IRCState(val closeCallback : (IRCState) -> Unit, val host : String, val ni
         if (!listItems.contains(channel)) {
             return
         }
-        connection!!.writeLine("PART $channel")
+        if (!channel.startsWith("#")) {
+            Platform.runLater {
+                listItems.remove(channel)
+                channelContents.remove(channel)
+            }
+        } else {
+            connection!!.writeLine("PART $channel")
+        }
     }
 
     fun connect() {
@@ -220,9 +227,14 @@ class IRCState(val closeCallback : (IRCState) -> Unit, val host : String, val ni
                 }
                 addChat(channel, it.messageSrc.substring(1).split("!")[0], it.content.substring(1))
             } else if (it.messageType == IRCMessageType.SERVER_NOTICE) {
-                if (it.messageSrc.startsWith(":ChanServ!")) {
-                    val channel = it.content.split("[")[1].split("]")[0]
-                    addSysChat(channel, "-ChanServ-: ${it.content.substring(1)}")
+                if (it.messageSrc.startsWith(":") && it.messageSrc.contains("!")) {
+                    val src = it.messageSrc.substring(1).split("!")[0]
+                    if (it.content.contains("[")) {
+                        val channel = it.content.split("[")[1].split("]")[0]
+                        addSysChat(channel, "-$src-: ${it.content.substring(1)}")
+                    } else {
+                        addChat(src, src, it.content.substring(1))
+                    }
                 } else {
                     addSysMessage(it.content.substring(1))
                 }
