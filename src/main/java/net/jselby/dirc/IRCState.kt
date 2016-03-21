@@ -21,7 +21,6 @@ import java.util.concurrent.CopyOnWriteArrayList
 class IRCState(val closeCallback : (IRCState) -> Unit, val host : String, val nickname : String,
                val username : String, val realname : String): Tab(host) {
     var connection : IRCConnection? = null
-    var isConnected = false
     var channelContents = HashMap<String, String>()
                               // User,   Channel(s)
     var connectedUsers = ConcurrentHashMap<String, CopyOnWriteArrayList<String>>()
@@ -211,7 +210,7 @@ class IRCState(val closeCallback : (IRCState) -> Unit, val host : String, val ni
     }
 
     fun connect() {
-        connection = IRCConnection(host, false, nickname, username, realname)
+        connection = IRCConnection(host, nickname, username, realname)
         connection!!.addHandler {
             if (it.messageType == IRCMessageType.PING) {
                 connection!!.writeLine(it.rawMessage.replace("PING", "PONG"))

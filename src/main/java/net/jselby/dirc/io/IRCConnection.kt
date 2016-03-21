@@ -6,7 +6,7 @@ import java.util.concurrent.CopyOnWriteArrayList
 import kotlin.concurrent.thread
 
 // IRC connection side of bot
-class IRCConnection(host : String, val usingTLS : Boolean = false, val nickname : String, val username : String, val realName : String) {
+class IRCConnection(host : String, val nickname : String, val username : String, val realName : String) {
     val hostname: String
     val port: Int
 
